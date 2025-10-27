@@ -25,6 +25,8 @@ We then normalize the numerical pitch data so they are on comparable ranges.
 ---
 
 ## Modeling Process
+For our first task, classifying the pitch to the pitcher, we've attempted a neural network approach that tries to directly assign any given pitch to a pitcher. This approach may not be the best, as it lacks the ability to capture differences in pitch type by pitcher (for example, a fastball from one pitcher may have characteristics that resemble a slider in another pitcher). To remedy this, one option would be to make a classifier for each pitch type and have the models train on only pitches of that pitch type.
+
 We could use one of two approaches, or both. We could use some form of unsupervised learning for pure outlier detection. The other approach is to create binary classifiers for each pitcher using XGBoost, CatBoost, logistic regression, etc., and then select the best model. We consider a pitch “suspect” if the model determines it is unlikely that the pitcher threw it.  
 
 **Test Plan** - We will train on 80% of the pitching data for model tuning and validation then we will have 20% of the pitching data as a test. **We will only test on data that was trained on in the same year (because the pitching style of different pitchers can change from year to year, it would be inconsistent to compare data across years. We learned this from our visualization of the data as well as looking at data visualizations for different pitchers on Savant).** We will first classify the pitch to a certain pitcher and given the actual pitcher who threw it, we can model how atypical it is. Can model probability as a simple Gaussian (bell curve) function. If the pitch has an abnormally low Z score, then we can flag the pitch as atypical and warrant further review.  
@@ -32,7 +34,8 @@ We could use one of two approaches, or both. We could use some form of unsupervi
 ---
 
 ## Visualization Process
-We can do something similar to this by comparing the vector of weights for each pitcher. Helpful for identifying which pitchers overlap. We can use a heatmap to compare the classifiers as well to identify how successful the model is for different groups.  
+We can do something similar to this by comparing the vector of weights for each pitcher. Helpful for identifying which pitchers overlap. We can use a heatmap to compare the classifiers as well to identify how successful the model is for different groups.
+Tools such as SHAP will help us in identifying which features are most significant in determining a classification. We've implemented this in our feature_exploration notebook, with fast-access graphs available in the outputs folder.
 
 ---
 
