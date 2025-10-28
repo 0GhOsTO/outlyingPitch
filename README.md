@@ -1,77 +1,220 @@
-# Pitcher Anomaly Detection with Statcast Data
+# Pitcher Anomaly Detection with Statcast Data - Midterm Report
 
-**(Edits to our project plan that reference the issue will be in bold text. Also, check note at bottom of readme)**
+**Video Presentation:** [[Presentation](https://www.youtube.com/watch?v=rqN7egnuWlw)]
+
+---
 
 ## Project Overview
-We will build a model that, given a single pitch based on Statcast features and context, predicts which pitcher threw it. This will be done for **qualified** pitchers in the MLB (**who have thrown at least 162 innings per season**), and based on those pitches assigned to that pitcher, we can then identify “outlier” pitches. This will be based on how unusual that pitch was for that pitcher in the context of pitching metrics (release point, spin rate, …), as well as game context (current count, position of runners, …). We can assign an anomaly score to this and then flag suspicious, uncharacteristic pitches.  
-Use case: Recently, multiple MLB pitchers have been investigated purposefully missing pitches in connection with gambling. Our model can help identify these anomaly pitches that help encourage further human review.
+
+We are building a model that, given a single pitch based on Statcast features and context, predicts which pitcher threw it. This will be done for all pitchers with a sufficient number of innings pitched in the MLB. The model learns the distinctive characteristics of each pitcher's repertoire based on pitching metrics (release point, spin rate, movement) as well as game context (current count, position of runners, score differential).
+
+**Use Case:** This model serves as an advanced scouting tool. By feeding pitches from another pitcher's starts into the model, we can analyze which pitcher profiles they most closely resemble and how they compare to different pitching styles. This provides insights into pitch characteristics, helps identify similar pitchers for comparative analysis, and reveals unique aspects of a pitcher's approach that distinguish them from others.
 
 ---
 
-## Objectives/Goals
-- Goal 1: Identify based on a given pitch, predict the pitcher.  
-- Goal 2: For a specific pitcher, quantify how “off” the pitch was and give it an anomaly scoring metric based around the pitch/game context - (by classification we have kind of already down this. I.e. logistic regression assigns a probability).  
+## Objectives
+
+1. **Goal 1:** Given pitch characteristics and game context, predict which pitcher threw the pitch.
+2. **Goal 2:** Use prediction probabilities and misclassifications to identify similar pitchers and compare pitching styles for scouting analysis.
 
 ---
 
-## Data Collection/Cleaning Process
-- Gather data from MLB savant using pybaseball. Clean data to sort by pitcher We have access to many features for each pitch, like spin axis, count it was thrown in, release point, velocity, etc. All available features are at https://baseballsavant.mlb.com/csv-docs.  
-- The source of the data will be from MLB Statcast via pybaseball (statcast_pitcher per pitcher) for the last decade.  
-- Per each pitch we will keep kinematic data like ( velocity, spin rate/axis, movement, release position, vertical approach angle, acceleration, plate location). Also context data like pitch type, count, zone, batter, handedness, catcher, inning/outs/runners, score differential, and game IDs.  
+## Data Collection
 
-As for the cleaning, we will drop corrupted rows and fill the few missing values within each pitcher season. Fortunately, each pitch already contains a field for the pitcher who threw it. Each pitch_type will be mapped to a binary feature (i.e. 1 if cutter, 0 otherwise). Rare pitches will be mapped to ‘other’.  
-We then normalize the numerical pitch data so they are on comparable ranges.  
+We gathered data from MLB Statcast using the pybaseball library for the 2025 season. The dataset includes comprehensive information for each pitch thrown:
 
----
+**Kinematic Features:**
+- Release speed, position (x, y, z), and extension
+- Spin rate and spin axis
+- Pitch movement (pfx_x, pfx_z)
+- Velocity components (vx0, vy0, vz0)
+- Acceleration components (ax, ay, az)
+- Plate location (plate_x, plate_z)
 
-## Modeling Process
-For our first task, classifying the pitch to the pitcher, we've attempted a neural network approach that tries to directly assign any given pitch to a pitcher. This approach may not be the best, as it lacks the ability to capture differences in pitch type by pitcher (for example, a fastball from one pitcher may have characteristics that resemble a slider in another pitcher). To remedy this, one option would be to make a classifier for each pitch type and have the models train on only pitches of that pitch type.
+**Contextual Features:**
+- Pitch type
+- Ball-strike count
+- Pitcher handedness (p_throws)
+- Batter handedness (stand)
+- Player name
 
-We could use one of two approaches, or both. We could use some form of unsupervised learning for pure outlier detection. The other approach is to create binary classifiers for each pitcher using XGBoost, CatBoost, logistic regression, etc., and then select the best model. We consider a pitch “suspect” if the model determines it is unlikely that the pitcher threw it.  
-
-**Test Plan** - We will train on 80% of the pitching data for model tuning and validation then we will have 20% of the pitching data as a test. **We will only test on data that was trained on in the same year (because the pitching style of different pitchers can change from year to year, it would be inconsistent to compare data across years. We learned this from our visualization of the data as well as looking at data visualizations for different pitchers on Savant).** We will first classify the pitch to a certain pitcher and given the actual pitcher who threw it, we can model how atypical it is. Can model probability as a simple Gaussian (bell curve) function. If the pitch has an abnormally low Z score, then we can flag the pitch as atypical and warrant further review.  
-
----
-
-## Visualization Process
-We can do something similar to this by comparing the vector of weights for each pitcher. Helpful for identifying which pitchers overlap. We can use a heatmap to compare the classifiers as well to identify how successful the model is for different groups.
-Tools such as SHAP will help us in identifying which features are most significant in determining a classification. We've implemented this in our feature_exploration notebook, with fast-access graphs available in the outputs folder.
+All available features are documented at https://baseballsavant.mlb.com/csv-docs.
 
 ---
 
-## Test Plan & Evaluation Metrics (Will be modified as we walk through)
+## Data Processing
 
-### Data Split
-- Training set → Use to teach the model
-- Validation set → use to tune settings
-- Test set → check the performance of the trained machine
+### Categorical Feature Encoding
 
-### Baseline
-- Classification → always predict the majority classification
-- Regression → always predict the average value.
+To perform classification, we converted categorical features into binary features:
 
-### Classification model training
-- Train XGBoost, CatBoost, logistic regression, etc.  
-- Use the validation data to stop early if it’s not improving  
-- Adjust the few knobs: max_depth, learning_rate, etc…  
+**Pitch Type Encoding:**
+- The pitch_type field contains encodings such as "FF" (four-seam fastball) or "CH" (changeup)
+- We created a separate binary feature for each pitch type
+- Each pitch now has a 1 in its corresponding pitch type column and 0 in all others
 
-### Final Check
-- Pick the best model between all different kinds of classifiers.  
-- Compare result with the baseline.  
+**Ball-Strike Count Encoding:**
+- Rather than treating balls and strikes as scaled numerical values, we recognized that each count has distinct strategic implications
+- We created binary features for each possible count (e.g., count_0-0, count_1-2, count_3-2)
+- This allows the model to learn the unique characteristics of pitches thrown in different counts
 
-### Evaluation Metrics (as we walk through)
-- Recall/fb-score: **this is for evaluating the performance of our binary classifiers. We specifically look at recall because we want to avoid false negatives (i.e. a pitch being marked an outlier when it isn't). But fb score is still relevant if we want to know whether or not a false negative or false positive is more significant.**
-- ROC curve/AUC: **This is also for evaluation of our binary classifiers, if we ever determine the false positive rate to be a significant issue**
-- Silhouette Score: (**This could be used for our unsupervised learning approach**)
+**Handedness Encoding:**
+- p_throws and stand represent pitcher and batter handedness (L or R)
+- Currently implemented with 2 binary features each (pitcher_hand_L, pitcher_hand_R, batter_hand_L, batter_hand_R)
+- This approach has been identified as problematic due to perfect collinearity and will be revised in future iterations
+
+### Data Filtering
+
+We filtered the dataset to focus on qualified major league starting pitchers:
+- Applied a minimum pitch count threshold of 2,000 pitches per pitcher
+- This filtering removed relief pitchers, who are deployed in different roles and situations
+- Final dataset includes 110 pitchers
+- This prevents the model from learning role-specific patterns rather than pitcher-specific characteristics
+
+### Feature Scaling
+
+All numerical features were normalized using StandardScaler to ensure they are on comparable ranges for the neural network.
 
 ---
 
-## Potential Risks
-- There might not be enough data for each” person. Therefore, we will not be able to classify every person who plays. We will be able to classify people who have already “enough” data.  
-- If the model is imbalanced, it might cause the high accuracy but catches 0 outliers(We will be able to find this out by other metrics)  
-- High risk on failure of predicting the “specific” case.
+## Preliminary Visualizations
 
+We created several visualizations to understand the data:
 
-## Note
-- The reason we do not want to train on past seasons and test on new ones is due to inconsistencies with the data measured by year. For example, there may be a pitcher that passes our threshold for qualified pitcher in one season, but not the other. So we decided to treat each year as its own monolith, comparing only pitches that were thrown in the same year.
-- We will elaborate on the features that influence specific pitch types more than others (for example, if spin axis is more likely to vary in a slider pitch than another feature)
+### Release Point Analysis
+
+Scatter plot of release_pos_x vs release_pos_z showing distinct clusters for left-handed and right-handed pitchers:
+
+![Release Point Clusters](images/release_point_clusters.png)
+
+Individual pitcher release point plots colored by pitch type, revealing consistency and variation patterns:
+
+![Release Point by Pitch Type](images/release_point_pitch_type.png)
+
+### Pitch Distribution
+
+Histogram of total pitches thrown by each pitcher, showing the distribution across all MLB pitchers. This was used to determine appropriate minimum pitch count threshold:
+
+![Pitch Count Distribution](images/pitch_count_histogram.png)
+
+### Feature Correlation Matrices
+
+Initial correlation matrix showed confounding effects of mixing left-handed and right-handed pitchers. Separate correlation matrices by handedness revealed clearer relationships between features, with notable correlations between release_speed and plate_z, and spin_rate with spin_axis within handedness groups:
+
+![Correlation Matrix by Handedness](images/correlation_matrix_handedness.png)
+
+---
+
+## Data Modeling Methods
+
+### Model Architecture
+
+We implemented a Multi-Layer Perceptron (MLP) neural network for pitcher classification:
+
+**Network Structure:**
+- Input layer: Variable size based on number of features (after one-hot encoding)
+- Hidden layer 1: 128 neurons with ReLU activation
+- Hidden layer 2: 64 neurons with ReLU activation
+- Dropout regularization: 0.3 dropout rate after each hidden layer
+- Output layer: 110 neurons (one per pitcher) with softmax activation
+
+**Training Configuration:**
+- Loss function: Cross-entropy loss
+- Optimizer: Adam with learning rate of 0.001
+- Batch size: 64
+- Training epochs: 50
+- Data split: 80% training, 20% validation (stratified by pitcher)
+
+**Implementation Details:**
+- Used PyTorch framework
+- Applied StandardScaler normalization to all numerical features
+- Tracked training loss, validation loss, and validation accuracy across epochs
+
+---
+
+## Preliminary Results
+
+### Classification Performance
+
+The neural network achieved strong performance in pitcher identification:
+
+**Overall Accuracy Metrics:**
+- Top-1 Accuracy (Exact Match): 0.8307
+- Top-3 Accuracy: 0.9607
+- Top-5 Accuracy: 0.9847
+
+These results indicate that the model correctly identifies the pitcher on the first guess 83% of the time, and includes the correct pitcher in the top 3 predictions 96% of the time.
+
+### Per-Pitcher Analysis
+
+Performance varied significantly across individual pitchers:
+- Some pitchers achieved near-perfect classification accuracy
+- Other pitchers showed poor accuracy, indicating less distinctive pitch characteristics or overlap with other pitchers' profiles
+
+### Feature Importance Investigation
+
+We applied SHAP (SHapley Additive exPlanations) analysis to pitchers with poor classification accuracy:
+- Identified that the handedness encoding scheme was problematic
+- The model appeared to learn the collinear relationship between pitcher_hand_L and pitcher_hand_R rather than learning meaningful patterns
+- This confirmed our suspicion that having two binary features for a single binary characteristic creates redundancy
+
+### Training Dynamics
+
+Analysis of training and validation loss curves revealed:
+- Both losses decreased steadily over epochs
+- Validation loss tracked training loss closely, indicating minimal overfitting
+- The model converged within 50 epochs
+
+---
+
+## Future Work
+
+### Alternative Classification Methods
+
+We plan to evaluate simpler classification approaches:
+- Decision Trees
+- Random Forests
+- K-Nearest Neighbors
+- XGBoost
+- CatBoost
+- Support Vector Machines
+
+These methods may provide better interpretability and could reveal whether the neural network's complexity is necessary for this task.
+
+### Unsupervised Learning Approach
+
+We will explore unsupervised methods for anomaly detection:
+- Isolation Forests for direct outlier detection
+- Autoencoders to learn pitcher-specific representations
+- Clustering methods to identify natural groupings of pitchers
+
+### Feature Engineering Improvements
+
+Based on preliminary results, we will:
+- Revise handedness encoding to eliminate redundancy (use single binary feature or remove one)
+- Experiment with derived features such as pitch movement magnitude
+- Consider interaction terms between contextual and kinematic features
+
+### Enhanced Evaluation
+
+We plan to implement additional evaluation metrics:
+- Confusion matrices to identify which pitchers are commonly confused
+- Precision and recall per pitcher
+- Analysis of misclassification patterns to identify pitcher similarities
+- Top-k accuracy analysis for scouting comparisons
+
+### Pitcher Comparison Pipeline
+
+Once classification performance is optimized:
+- Use prediction probabilities to measure similarity between pitchers
+- Analyze confusion patterns to identify pitchers with similar repertoires
+- Develop interpretable comparisons for scouting applications
+- Create visualization tools for pitch-by-pitch comparison across pitchers
+
+---
+
+## Repository Contents
+
+- `feature_exploration.ipynb`: Preliminary data visualization and exploration
+- `MLP_feature_cleaning.ipynb`: Feature cleaning, Neural network implementation and training
+- `README.md`: This midterm report  
