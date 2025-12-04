@@ -103,6 +103,14 @@ Initial correlation matrix showed confounding effects of mixing left-handed and 
 
 ![Correlation Matrix by Handedness](images/correlation_matrix_handedness.png)
 
+### Pitcher Similarity Visualizations
+
+Averaging out a pitcher's ground truth pitches into a single vector using the same features the model will train on, we compared the euclidean distances and cosine distances of these 'characteristic vectors' to determine which pitchers threw similarly to one another beforehand.
+
+![Pitcher Similarity (Cosine Distance)](images/cos_dist_pitcher_similarity.PNG)
+
+![Pitcher Similarity (Euclidean Distance)](images/euc_dist_pitcher_similarity.PNG)
+
 ---
 
 ## Data Modeling Methods
