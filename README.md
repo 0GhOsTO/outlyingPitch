@@ -19,6 +19,20 @@ We are building a model that, given a single pitch based on Statcast features an
 
 ---
 
+## Assumptions and Limitations
+
+While goal 1 was realtively easy to achieve, our project requires a few strong assumptions in order to treat it as a scouting tool. To try to reveal more advanced between pitchers that clustering would normally miss, we decided to train a classifier in order to give us a probability distribution of how likely it was that a pitcher threw a pitch. We calculate the similarity as follows:
+
+- For any pitcher, we run all their available pitches through the model. 
+- We take the output of the softmax final layer, the probability distribution over the classes, and aggregate them. If the pitcher is in the training set, we ignore the probability attributed to themselves in this aggregation. 
+- We then normalize the remaining values into another probability vector, where the $$j$$th entry is the total percent of error attributed to pitcher $$j$$. 
+- We consider the larger the error attribution to pitcher $$j$$ implies that the original pitcher and $$j$$ are similar. 
+- If the pitcher has their own class (in the training set) we consider the total error: if the error is high, the pitcher is unique and their signature is easily learned by the model. If the pitcher is classified poorly, we consider them to be generalists that overlap with many different pitchers.
+
+This approach rests on the assumption that the model is able to correctly classify unique fingerprints. However, due to the chosen architecture this may not be entirely true. It may be the model is classifying based on some single difference instead of real separation. We specifically tried to avoid leaking handedness during training so that the models could identify similarities between pitchers despite different handedness. 
+
+
+
 ## Data Collection
 
 We gathered data from MLB Statcast using the pybaseball library for the 2025 season. The dataset includes comprehensive information for each pitch thrown:
@@ -51,17 +65,22 @@ To perform classification, we converted categorical features into binary feature
 **Pitch Type Encoding:**
 - The pitch_type field contains encodings such as "FF" (four-seam fastball) or "CH" (changeup)
 - We created a separate binary feature for each pitch type
+- Pitches with less than 1000 total pitches thrown were binned into an "other" category and deemed rare pitches. Pitches in the bin:
 - Each pitch now has a 1 in its corresponding pitch type column and 0 in all others
 
 **Ball-Strike Count Encoding:**
 - Rather than treating balls and strikes as scaled numerical values, we recognized that each count has distinct strategic implications
 - We created binary features for each possible count (e.g., count_0-0, count_1-2, count_3-2)
 - This allows the model to learn the unique characteristics of pitches thrown in different counts
+- Had to filter out invalid, possible error counts (like 4-2, 1-3)
 
 **Handedness Encoding:**
 - p_throws and stand represent pitcher and batter handedness (L or R)
-- Currently implemented with 2 binary features each (pitcher_hand_L, pitcher_hand_R, batter_hand_L, batter_hand_R)
-- This approach has been identified as problematic due to perfect collinearity and will be revised in future iterations
+- Originally implemented with 2 binary features each (pitcher_hand_L, pitcher_hand_R, batter_hand_L, batter_hand_R)
+- Now there is a single binary feature for the matchup of the at-bat. If the batter and pitcher are not the same handedness it is 1, otherwise it is 0
+- release_position_x was multiplied by -1 for all lefties so that handedness does not leak
+
+[image](release points before and after)
 
 ### Data Filtering
 
