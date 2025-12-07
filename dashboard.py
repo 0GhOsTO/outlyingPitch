@@ -117,18 +117,18 @@ def compute_pitcher_similarity(model, scaler, label_encoder, df, pitcher_name, f
     predictions = np.argmax(probabilities, axis=1)
     uniqueness = np.mean(predictions == pitcher_idx)
     
-    # Calculate similarity scores (aggregate probabilities excluding self)
-    # Sum probabilities for each pitcher across all pitches
-    total_probs = np.sum(probabilities, axis=0)
+    # Calculate similarity scores using MEAN probability (per-pitch average)
+    # This makes scores interpretable: "On average, how much does each of A's pitches resemble B?"
+    mean_probs = np.mean(probabilities, axis=0)  # Average probability per pitch
     
     # Zero out the pitcher's own probability
-    total_probs[pitcher_idx] = 0
+    mean_probs[pitcher_idx] = 0
     
     # Normalize to get similarity scores
-    if np.sum(total_probs) > 0:
-        similarity_scores_array = total_probs / np.sum(total_probs)
+    if np.sum(mean_probs) > 0:
+        similarity_scores_array = mean_probs / np.sum(mean_probs)
     else:
-        similarity_scores_array = total_probs
+        similarity_scores_array = mean_probs
     
     # Create dictionary mapping pitcher names to scores
     similarity_scores = {
@@ -151,15 +151,18 @@ def compute_pitcher_similarity(model, scaler, label_encoder, df, pitcher_name, f
     return similarity_scores, uniqueness, pitch_details
 
 
-def plot_network_graph(df, pitcher_name, similarity_scores, distance_matrix, metric_name="Cosine", top_n=30):
-    """Create an interactive network graph showing pitcher similarities using MDS."""
+def plot_network_graph(df, pitcher_name, similarity_scores, distance_matrix, metric_name="Cosine", top_n=30, all_pitchers_in_matrix=None):
+    """Create an interactive network graph showing pitcher similarities using force-directed layout."""
     # Get top N most similar pitchers
     sorted_scores = sorted(similarity_scores.items(), key=lambda x: x[1], reverse=True)[:top_n]
     top_pitchers = [pitcher_name] + [p for p, _ in sorted_scores]
     
-    # Get indices in the full pitcher list
-    all_pitchers = sorted(df['player_name'].unique())
-    pitcher_indices = [all_pitchers.index(p) for p in top_pitchers if p in all_pitchers]
+    # Get indices - if all_pitchers_in_matrix provided, use that list, otherwise use full list
+    if all_pitchers_in_matrix is not None:
+        pitcher_indices = [all_pitchers_in_matrix.index(p) for p in top_pitchers if p in all_pitchers_in_matrix]
+    else:
+        all_pitchers = sorted(df['player_name'].unique())
+        pitcher_indices = [all_pitchers.index(p) for p in top_pitchers if p in all_pitchers]
     
     if len(pitcher_indices) < 2:
         return None
@@ -167,39 +170,77 @@ def plot_network_graph(df, pitcher_name, similarity_scores, distance_matrix, met
     # Extract submatrix for these pitchers
     sub_matrix = distance_matrix[np.ix_(pitcher_indices, pitcher_indices)]
     
-    # Use MDS to position nodes
-    mds = MDS(n_components=2, dissimilarity='precomputed', random_state=42)
-    positions = mds.fit_transform(sub_matrix)
-    positions = positions * 5.0  # Scale for visibility
+    # Use a circular layout to spread nodes out
+    n_nodes = len(pitcher_indices)
+    angles = np.linspace(0, 2 * np.pi, n_nodes, endpoint=False)
+    radius = 5.0
     
-    # Create edges
+    # Put selected pitcher in center, others in circle
+    positions = np.zeros((n_nodes, 2))
+    positions[0] = [0, 0]  # Selected pitcher at origin
+    for i in range(1, n_nodes):
+        positions[i] = [radius * np.cos(angles[i]), radius * np.sin(angles[i])]
+    
+    # Create directed edges (all pairs, both directions, filter out near-zero distances)
     edges = []
+    threshold = 0.01  # Only show edges with meaningful distance
     for i in range(len(pitcher_indices)):
-        for j in range(i+1, len(pitcher_indices)):
-            edges.append((i, j, sub_matrix[i][j]))
+        for j in range(len(pitcher_indices)):
+            if i != j and sub_matrix[i][j] > threshold:
+                edges.append((i, j, sub_matrix[i][j]))
+    
+    if len(edges) == 0:
+        return None
     
     # Normalize distances for color mapping
     distances = [e[2] for e in edges]
     min_dist, max_dist = min(distances), max(distances)
     
-    # Plot edges
+    # Plot directed edges - use curved arrows to show directionality when A→B and B→A both exist
     edge_traces = []
     for i, j, dist in edges:
         # Color based on distance (blue=similar, red=dissimilar)
         norm_dist = (dist - min_dist) / (max_dist - min_dist) if max_dist != min_dist else 0.5
-        color = f'rgba({int(255*norm_dist)}, {int(100*(1-norm_dist))}, {int(255*(1-norm_dist))}, 0.3)'
+        color = f'rgba({int(255*norm_dist)}, {int(100*(1-norm_dist))}, {int(255*(1-norm_dist))}, 0.5)'
         
-        edge_traces.append(
-            go.Scatter(
-                x=[positions[i, 0], positions[j, 0], None],
-                y=[positions[i, 1], positions[j, 1], None],
-                mode='lines',
-                line=dict(width=1, color=color),
-                hoverinfo='text',
-                text=f'Distance: {dist:.4f}',
-                showlegend=False
+        # Check if reverse edge exists to add curvature
+        reverse_exists = any(e[0] == j and e[1] == i for e in edges)
+        
+        if reverse_exists:
+            # Curve the edge slightly to show both directions
+            mid_x = (positions[i, 0] + positions[j, 0]) / 2
+            mid_y = (positions[i, 1] + positions[j, 1]) / 2
+            # Perpendicular offset
+            dx = positions[j, 0] - positions[i, 0]
+            dy = positions[j, 1] - positions[i, 1]
+            offset = 0.3
+            curve_x = mid_x - offset * dy / (np.sqrt(dx**2 + dy**2) + 1e-6)
+            curve_y = mid_y + offset * dx / (np.sqrt(dx**2 + dy**2) + 1e-6)
+            
+            edge_traces.append(
+                go.Scatter(
+                    x=[positions[i, 0], curve_x, positions[j, 0], None],
+                    y=[positions[i, 1], curve_y, positions[j, 1], None],
+                    mode='lines',
+                    line=dict(width=2, color=color),
+                    hoverinfo='text',
+                    text=f'{top_pitchers[i]} → {top_pitchers[j]}<br>Distance: {dist:.4f}',
+                    showlegend=False
+                )
             )
-        )
+        else:
+            # Straight edge
+            edge_traces.append(
+                go.Scatter(
+                    x=[positions[i, 0], positions[j, 0], None],
+                    y=[positions[i, 1], positions[j, 1], None],
+                    mode='lines',
+                    line=dict(width=2, color=color),
+                    hoverinfo='text',
+                    text=f'{top_pitchers[i]} → {top_pitchers[j]}<br>Distance: {dist:.4f}',
+                    showlegend=False
+                )
+            )
     
     # Highlight selected pitcher and similar ones
     node_colors = ['red' if top_pitchers[i] == pitcher_name else 'lightblue' for i in range(len(top_pitchers))]
@@ -220,7 +261,7 @@ def plot_network_graph(df, pitcher_name, similarity_scores, distance_matrix, met
     
     fig = go.Figure(data=edge_traces + [node_trace])
     fig.update_layout(
-        title=f'Pitcher Similarity Network ({metric_name})<br><sub>Node positions via MDS, edge colors show distance</sub>',
+        title=f'Directed Pitcher Similarity Network ({metric_name})<br><sub>Curved edges show bidirectional relationships (A→B and B→A). Edge color: blue=similar, red=dissimilar</sub>',
         showlegend=False,
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
@@ -480,67 +521,58 @@ def main():
                 filter_count=filter_count
             )
         
-        # Compute distance matrices using model predictions and feature distributions
+        # Compute distance matrices - use model predictions for asymmetric similarities
         @st.cache_data
-        def compute_distance_matrices(_model, _scaler, _label_encoder, _df):
-            """Compute pairwise distance matrices using model predictions and feature distributions."""
-            all_pitchers = sorted(_df['player_name'].unique())
-            n_pitchers = len(all_pitchers)
-            model_dist_matrix = np.zeros((n_pitchers, n_pitchers))
-            euclidean_dist_matrix = np.zeros((n_pitchers, n_pitchers))
-            pitcher_feature_distributions = []
+        def compute_model_similarity_matrix(_model, _scaler, _label_encoder, _df, top_pitchers_list):
+            """Compute asymmetric similarity matrix using model predictions for subset of pitchers."""
+            n_pitchers = len(top_pitchers_list)
+            similarity_matrix = np.zeros((n_pitchers, n_pitchers))
             
-            # Progress tracking
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            for i, pitcher in enumerate(all_pitchers):
-                status_text.text(f"Computing similarities for {pitcher}... ({i+1}/{n_pitchers})")
-                progress_bar.progress((i + 1) / n_pitchers)
-                
-                # Get model-based similarities
+            for i, pitcher_a in enumerate(top_pitchers_list):
+                # Get similarity scores when analyzing pitcher A
                 sim_scores, _, _ = compute_pitcher_similarity(
-                    _model, _scaler, _label_encoder, _df, pitcher
+                    _model, _scaler, _label_encoder, _df, pitcher_a
                 )
                 
-                # Fill model distance matrix (convert similarity to distance)
-                for j, other_pitcher in enumerate(all_pitchers):
+                # Fill in row i with similarities to other pitchers
+                for j, pitcher_b in enumerate(top_pitchers_list):
                     if i != j:
-                        model_dist_matrix[i][j] = 1 - sim_scores.get(other_pitcher, 0)
-                
-                # Get feature distribution for Euclidean (use percentiles to capture distribution)
-                p_data = _df[_df['player_name'] == pitcher].drop(['player_name'], axis=1)
-                feature_vec = []
-                for col in p_data.columns:
-                    if len(p_data) > 0:
-                        feature_vec.extend([
-                            p_data[col].quantile(0.25),
-                            p_data[col].median(),
-                            p_data[col].quantile(0.75),
-                            p_data[col].std()
-                        ])
-                    else:
-                        feature_vec.extend([0, 0, 0, 0])
-                pitcher_feature_distributions.append(np.array(feature_vec))
+                        similarity_matrix[i][j] = sim_scores.get(pitcher_b, 0)
             
-            # Compute Euclidean distances on distributions
-            for i in range(n_pitchers):
-                for j in range(i+1, n_pitchers):
-                    dist = np.linalg.norm(pitcher_feature_distributions[i] - pitcher_feature_distributions[j])
-                    euclidean_dist_matrix[i][j] = dist
-                    euclidean_dist_matrix[j][i] = dist
-            
-            progress_bar.empty()
-            status_text.empty()
-            
-            return model_dist_matrix, euclidean_dist_matrix, all_pitchers
+            # Convert similarity to distance (1 - similarity)
+            distance_matrix = 1 - similarity_matrix
+            return distance_matrix
         
-        with st.spinner("Computing pairwise distance matrices (this may take a moment)..."):
-            model_dist_matrix, euclidean_dist_matrix, all_pitchers = compute_distance_matrices(
-                model, scaler, label_encoder, df
+        # Get top similar pitchers to focus computation
+        top_similar_pitchers = sorted(similarity_scores.items(), key=lambda x: x[1], reverse=True)[:20]
+        top_pitcher_names = [selected_pitcher] + [p for p, _ in top_similar_pitchers]
+        
+        with st.spinner("Computing model-based distance matrix for network graph..."):
+            model_dist_matrix = compute_model_similarity_matrix(
+                model, scaler, label_encoder, df, top_pitcher_names
             )
+            all_pitchers = top_pitcher_names
+        
+        # Compute Euclidean distance matrix for comparison
+        with st.spinner("Computing Euclidean distance matrix..."):
+            pitcher_vectors = []
+            for p in all_pitchers:
+                p_data = df[df['player_name'] == p].drop(['player_name'], axis=1)
+                if len(p_data) > 0:
+                    avg_vec = p_data.mean(axis=0).values
+                    pitcher_vectors.append(avg_vec / np.linalg.norm(avg_vec))
+                else:
+                    pitcher_vectors.append(np.zeros(len(p_data.columns)))
             
-            # Get similarities for selected pitcher
+            n_pitchers = len(all_pitchers)
+            euclidean_dist_matrix = np.zeros((n_pitchers, n_pitchers))
+            
+            for i in range(n_pitchers):
+                for j in range(n_pitchers):
+                    if i != j:
+                        euclidean_dist_matrix[i][j] = np.linalg.norm(pitcher_vectors[i] - pitcher_vectors[j])
+            
+            # Get Euclidean similarities for selected pitcher
             pitcher_idx = all_pitchers.index(selected_pitcher)
             euclidean_similarities = {}
             for i, p in enumerate(all_pitchers):
@@ -608,25 +640,33 @@ def main():
             
             # Network graphs
             st.subheader("Similarity Network Visualizations")
-            tab_net1, tab_net2 = st.tabs(["Model-Based Network", "Euclidean Distribution Network"])
+            tab_net1, tab_net2 = st.tabs(["Model-Based Network", "Euclidean Network"])
             
             with tab_net1:
                 fig_network = plot_network_graph(
                     df, selected_pitcher, similarity_scores, 
-                    model_dist_matrix, "Model-Based Similarity", top_n=min(top_n, 20)
+                    model_dist_matrix, "Model-Based Similarity", top_n=min(top_n, 20),
+                    all_pitchers_in_matrix=all_pitchers
                 )
                 if fig_network:
                     st.plotly_chart(fig_network, use_container_width=True)
-                    st.caption("Network graph using model predictions. Each pitcher's position reflects how the model sees their similarity to others.")
+                    st.caption("Network graph showing asymmetric model-based similarities. Curved edges show A→B may differ from B→A.")
+                else:
+                    st.info("No network graph available - insufficient similarity data for this pitcher.")
             
             with tab_net2:
                 fig_network_euc = plot_network_graph(
                     df, selected_pitcher, euclidean_similarities,
-                    euclidean_dist_matrix, "Euclidean Distance (Distribution-Based)", top_n=min(top_n, 20)
+                    euclidean_dist_matrix, "Euclidean Distance", top_n=min(top_n, 20),
+                    all_pitchers_in_matrix=all_pitchers
                 )
                 if fig_network_euc:
                     st.plotly_chart(fig_network_euc, use_container_width=True)
-                    st.caption("Network graph using feature distributions (25th, 50th, 75th percentiles + std dev). Captures pitch repertoire variety.")
+                    st.caption("Network graph using Euclidean distance on averaged features.")
+                else:
+                    st.info("No network graph available - insufficient similarity data for this pitcher.")
+                    st.plotly_chart(fig_network_euc, use_container_width=True)
+                    st.caption("Network graph using Euclidean distance on averaged features.")
             
             # Detailed similarity table
             st.subheader("Similarity Scores")
