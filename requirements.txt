@@ -1,0 +1,6 @@
+streamlit>=1.52.0
+pandas>=2.0.0
+numpy>=1.23.0
+plotly>=5.0.0
+pybaseball>=2.2.0
+scikit-learn>=1.0.0
