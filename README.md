@@ -194,6 +194,64 @@ Analysis of training and validation loss curves revealed:
 
 ---
 
+## Confusion-Based Similarity Implementation
+
+After achieving strong classification performance, we implemented our confusion-based similarity approach to identify which pitchers the model finds most similar.
+
+### How It Works
+
+The key insight is that the model's confusion patterns reveal meaningful similarities. When the model consistently misclassifies pitcher A's pitches as pitcher B, it suggests they have similar pitch characteristics.
+
+**Step 1: Build the Confusion Mass Matrix**
+- Run all validation pitches through the trained model
+- For each pitcher i, accumulate the softmax probability mass assigned to each other pitcher j
+- This creates a matrix C where C[i,j] represents the total probability mass from pitcher i confused as pitcher j
+- Zero out the diagonal (we don't care about self-classification for similarity)
+
+**Step 2: Compute Off-Diagonal Confusion Mass**
+- For each pitcher i, calculate m[i] = sum of all confusion masses (how confusable they are overall)
+- Pitchers with high m[i] are frequently misclassified (generic/overlapping styles)
+- Pitchers with low m[i] are rarely misclassified (unique/distinctive styles)
+
+**Step 3: Calculate Weighted Symmetric Similarity**
+
+We use the formula:
+
+$$\text{Sim}[i,j] = \frac{C[i,j] + C[j,i]}{m[i] + m[j]}$$
+
+This normalizes by the total confusion masses of both pitchers, making similarities comparable even when pitchers have very different distinctiveness levels. It's symmetric by construction (Sim[i,j] = Sim[j,i]).
+
+**Why This Approach?**
+- It captures what the model actually learned, not just geometric distance in feature space
+- Normalizing by confusion mass prevents rare confusions from dominating the similarity scores
+- If A and B have a similar pitch and not much else, this will be reflected by the mass, when it would be hidden by an aggregate comparison.
+- It emphasizes systematic patterns among frequently confused pitchers
+- Unlike common player similarities, it works across handedness because our feature processing hid this attribute to the model during training training
+
+### Saved Output Files
+
+We save all the computed matrices to the `outputs/` directory:
+- `confusion_mass_matrix.npy` - The full C matrix (110 x 110)
+- `off_diagonal_mass.npy` - Total confusion per pitcher m (110,)
+- `similarity_matrix_weighted_symmetric.npy` - Final similarity scores Sim (110 x 110)
+- `pitcher_uniqueness.npy` - Self-classification accuracy per pitcher (110,)
+- `pitcher_names.npy` - Pitcher name mapping (110,)
+
+### Example Results
+
+**Top Pitcher Confusions (Directional):**
+These show which pitchers get confused for each other most often. The asymmetry reveals interesting patterns - for example, pitcher A might often be confused as B, but not vice versa.
+
+![Top Confusions Heatmap](images/top_confusions_heatmap.png)
+*Heatmap showing the highest confusion masses between pitcher pairs*
+
+**Top Symmetric Similarities:**
+These are the pitcher pairs with the highest weighted symmetric similarity scores, representing the most comparable pitch profiles according to the model.
+
+[Add table or visualization showing top 20 most similar pitcher pairs]
+
+---
+
 ## Future Work
 
 ### Alternative Classification Methods
