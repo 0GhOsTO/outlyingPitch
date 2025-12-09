@@ -263,7 +263,9 @@ These are the pitcher pairs with the highest weighted symmetric similarity score
 
 ## Interactive Dashboard
 
-We built a Streamlit dashboard (`dashboard.py`) that brings the analysis to life:
+We built a Streamlit dashboard (`dashboard.py`):
+
+![Abbott Similarity Network](images/AbbottSimilarity.png)
 
 **Features:**
 - Select any pitcher and view their most similar matches using confusion-based similarity
