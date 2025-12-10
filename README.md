@@ -84,6 +84,8 @@ After these transformations, the p_throws column was dropped so the model has no
 ![Handedness Correction](images/HandednessMaps.png)
 *Before and After: Pitch movement and release position for LHP vs RHP. After transformation, left-handed pitchers align with right-handed convention, preventing the model from using handedness as a shortcut.*
 
+Overall, dealing with handedness was the biggest challenge in the data processing/feature extraction phase.
+
 ### Data Filtering
 
 We filtered the dataset to focus on qualified major league starting pitchers:
@@ -100,7 +102,7 @@ All numerical features were normalized using StandardScaler to ensure they are o
 
 ## Preliminary Visualizations
 
-We created several visualizations to understand the data:
+Before we attempted any modeling, we had to get familiar with the data. We created several visualizations to understand the data:
 
 ### Release Point Analysis
 
@@ -124,6 +126,8 @@ Initial correlation matrix showed confounding effects of mixing left-handed and 
 
 ![Correlation Matrix by Handedness](images/correlation_matrix_handedness.png)
 
+At this point, we realized handedness was a cumbersome feature that we needed to account for.
+
 ### Pitcher Similarity Visualizations
 
 Averaging out a pitcher's ground truth pitches into a single vector using the same features the model will train on, we compared the euclidean distances and cosine distances of these 'characteristic vectors' to determine which pitchers threw similarly to one another beforehand.
@@ -131,15 +135,56 @@ Averaging out a pitcher's ground truth pitches into a single vector using the sa
 ![Pitcher Similarity (Cosine Distance)](images/cos_dist_pitcher_similarity.PNG)
 
 ![Pitcher Similarity (Euclidean Distance)](images/euc_dist_pitcher_similarity.PNG)
+*Difficult to interpret here, but within MLP_feature_cleaning.ipynb you can interact with the image.*
 
 ---
 
 ## Data Modeling Methods
 
+### Model Selection
+
+We considered several classification architectures before settling on the Multi-Layer Perceptron (MLP):
+
+**Models Considered:**
+- **Logistic Regression:** Baseline linear model - struggles with the non-linear relationships between pitch features
+- **Random Forest:** Ensemble tree-based model - lacksthe ability to capture complex feature interactions as effectively as neural networks
+- **Multi-Layer Perceptron (MLP):** Selected for final implementation due to superior performance in capturing non-linear patterns and pitcher-specific signatures
+
+**Why MLP?**
+- Ability to learn complex, non-linear relationships between pitch characteristics
+- Flexibility in architecture allows optimization for this specific task
+- Strong performance on multi-class classification problems with overlapping classes
+- Can effectively leverage the high-dimensional feature space created by one-hot encoding
+
+### Hyperparameter Tuning
+
+We conducted systematic hyperparameter optimization to maximize classification accuracy:
+
+**Parameters Tuned:**
+    - To be added
+- **Hidden Layer Architecture:** 
+  - Final: Two hidden layers 
+- **Dropout Rate:** 
+  - Final: 
+- **Learning Rate:** 
+  - 
+- **Batch Size:** Compared 32, 64, 128, 256
+  - Final: 
+
+**Tuning Process:**
+- Used ...-fold cross-validation on the training set
+- Evaluated based on validation f1 and top-3 accuracy
+- Monitored for overfitting by tracking training vs validation loss gap
+- Selected final configuration that maximized validation accuracy while maintaining training stability
+
+**Results of Tuning:**
+- Improved top-1 accuracy from x% (baseline configuration) to y% (tuned)
+
 ### Model Architecture
 
 We implemented a Multi-Layer Perceptron (MLP) neural network for pitcher classification:
 
+CHANGE NOW
 **Network Structure:**
 - Input layer: Variable size based on number of features (after one-hot encoding)
 - Hidden layer 1: 128 neurons with ReLU activation
@@ -326,4 +371,4 @@ Explore other methods for measuring pitcher similarity:
 - `outputs/similarity_matrix_weighted_symmetric.npy`: Weighted symmetric similarity Sim
 - `outputs/pitcher_uniqueness.npy`: Self-classification accuracy per pitcher
 - `outputs/pitcher_names.npy`: Pitcher name array
-- `statcast_all_cols_2025.csv`: Raw Statcast data (download via pybaseball)  
+- `statcast_all_cols_2025.csv`: Raw Statcast data (download via pybaseball)
