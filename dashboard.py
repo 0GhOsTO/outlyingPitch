@@ -35,7 +35,7 @@ class PitcherClassifier(nn.Module):
 
 @st.cache_resource
 def load_model_and_artifacts():
-    """Load trained model, scaler, label encoder, and data."""
+    """Load trained model, scaler, label encoder, data, and confusion-based similarity matrices."""
     try:
         # Load artifacts
         with open('scaler.pkl', 'rb') as f:
@@ -55,16 +55,29 @@ def load_model_and_artifacts():
         model.load_state_dict(torch.load('model.pt', map_location=torch.device('cpu')))
         model.eval()
         
-        return model, scaler, label_encoder, df
+        # Load confusion-based similarity matrices
+        confusion_matrices = {}
+        if os.path.exists('outputs/confusion_mass_matrix.npy'):
+            confusion_matrices['C'] = np.load('outputs/confusion_mass_matrix.npy')
+            confusion_matrices['m'] = np.load('outputs/off_diagonal_mass.npy')
+            confusion_matrices['Sim'] = np.load('outputs/similarity_matrix_weighted_symmetric.npy')
+            confusion_matrices['uniqueness'] = np.load('outputs/pitcher_uniqueness.npy')
+            confusion_matrices['pitcher_names'] = np.load('outputs/pitcher_names.npy', allow_pickle=True)
+            st.success("✓ Loaded confusion-based similarity matrices")
+        else:
+            st.warning("⚠️ Confusion matrices not found. Run the similarity computation cells in the notebook first.")
+            confusion_matrices = None
+        
+        return model, scaler, label_encoder, df, confusion_matrices
     except Exception as e:
         st.error(f"Error loading model artifacts: {e}")
         st.info("Please ensure you have run the notebook cells to save model.pt, scaler.pkl, label_encoder.pkl, and processed_data.csv")
-        return None, None, None, None
+        return None, None, None, None, None
 
 
-def compute_pitcher_similarity(model, scaler, label_encoder, df, pitcher_name, filter_pitch_type=None, filter_count=None):
+def compute_pitcher_similarity(model, scaler, label_encoder, df, pitcher_name, confusion_matrices=None, filter_pitch_type=None, filter_count=None):
     """
-    Compute similarity scores for a given pitcher.
+    Compute similarity scores using confusion-based weighted symmetric similarity.
     
     Args:
         model: Trained PyTorch model
@@ -72,19 +85,21 @@ def compute_pitcher_similarity(model, scaler, label_encoder, df, pitcher_name, f
         label_encoder: Fitted LabelEncoder
         df: Processed DataFrame with all pitches
         pitcher_name: Name of the pitcher to analyze
+        confusion_matrices: Dict with precomputed confusion matrices (C, Sim, m, uniqueness)
         filter_pitch_type: Optional pitch type filter
         filter_count: Optional count situation filter
     
     Returns:
-        similarity_scores: Dict mapping pitcher names to similarity scores
+        similarity_scores: Dict mapping pitcher names to weighted symmetric similarity scores
         uniqueness: Self-classification accuracy (higher = more unique)
         pitch_details: DataFrame with per-pitch predictions
+        confusion_mass: Dict with directional confusion masses
     """
     # Filter pitches for the selected pitcher
     pitcher_pitches = df[df['player_name'] == pitcher_name].copy()
     
     if len(pitcher_pitches) == 0:
-        return {}, 0.0, pd.DataFrame()
+        return {}, 0.0, pd.DataFrame(), {}
     
     # Apply filters if provided
     if filter_pitch_type:
@@ -98,7 +113,7 @@ def compute_pitcher_similarity(model, scaler, label_encoder, df, pitcher_name, f
             pitcher_pitches = pitcher_pitches[pitcher_pitches[f'count_{filter_count}'] == 1]
     
     if len(pitcher_pitches) == 0:
-        return {}, 0.0, pd.DataFrame()
+        return {}, 0.0, pd.DataFrame(), {}
     
     # Prepare features
     X = pitcher_pitches.drop(['player_name'], axis=1).values
@@ -117,25 +132,49 @@ def compute_pitcher_similarity(model, scaler, label_encoder, df, pitcher_name, f
     predictions = np.argmax(probabilities, axis=1)
     uniqueness = np.mean(predictions == pitcher_idx)
     
-    # Calculate similarity scores using MEAN probability (per-pitch average)
-    # This makes scores interpretable: "On average, how much does each of A's pitches resemble B?"
-    mean_probs = np.mean(probabilities, axis=0)  # Average probability per pitch
-    
-    # Zero out the pitcher's own probability
-    mean_probs[pitcher_idx] = 0
-    
-    # Normalize to get similarity scores
-    if np.sum(mean_probs) > 0:
-        similarity_scores_array = mean_probs / np.sum(mean_probs)
+    # Use precomputed confusion-based similarities if available
+    if confusion_matrices is not None:
+        Sim = confusion_matrices['Sim']
+        C = confusion_matrices['C']
+        m = confusion_matrices['m']
+        
+        # Get weighted symmetric similarities for this pitcher
+        # Sim[i,j] = (C[i,j] + C[j,i]) / (m[i] + m[j])
+        similarity_scores_array = Sim[pitcher_idx].copy()
+        similarity_scores_array[pitcher_idx] = 0  # Zero out self
+        
+        # Get directional confusion masses
+        confusion_mass_array = C[pitcher_idx].copy()
+        confusion_mass_array[pitcher_idx] = 0
+        
+        # Create dictionaries
+        similarity_scores = {
+            label_encoder.classes_[i]: similarity_scores_array[i]
+            for i in range(len(label_encoder.classes_))
+            if i != pitcher_idx and similarity_scores_array[i] > 0
+        }
+        
+        confusion_mass = {
+            label_encoder.classes_[i]: confusion_mass_array[i]
+            for i in range(len(label_encoder.classes_))
+            if i != pitcher_idx and confusion_mass_array[i] > 0
+        }
     else:
-        similarity_scores_array = mean_probs
-    
-    # Create dictionary mapping pitcher names to scores
-    similarity_scores = {
-        label_encoder.classes_[i]: similarity_scores_array[i]
-        for i in range(len(label_encoder.classes_))
-        if i != pitcher_idx and similarity_scores_array[i] > 0
-    }
+        # Fallback to old method if matrices not available
+        mean_probs = np.mean(probabilities, axis=0)
+        mean_probs[pitcher_idx] = 0
+        
+        if np.sum(mean_probs) > 0:
+            similarity_scores_array = mean_probs / np.sum(mean_probs)
+        else:
+            similarity_scores_array = mean_probs
+        
+        similarity_scores = {
+            label_encoder.classes_[i]: similarity_scores_array[i]
+            for i in range(len(label_encoder.classes_))
+            if i != pitcher_idx and similarity_scores_array[i] > 0
+        }
+        confusion_mass = {}
     
     # Create pitch details dataframe
     pitch_details = pitcher_pitches.copy()
@@ -148,7 +187,7 @@ def compute_pitcher_similarity(model, scaler, label_encoder, df, pitcher_name, f
         pitch_details[f'top_{i+1}_pitcher'] = label_encoder.inverse_transform(top3_indices[:, i])
         pitch_details[f'top_{i+1}_prob'] = probabilities[np.arange(len(probabilities)), top3_indices[:, i]]
     
-    return similarity_scores, uniqueness, pitch_details
+    return similarity_scores, uniqueness, pitch_details, confusion_mass
 
 
 def plot_network_graph(df, pitcher_name, similarity_scores, distance_matrix, metric_name="Cosine", top_n=30, all_pitchers_in_matrix=None):
@@ -477,7 +516,7 @@ def main():
     
     # Load model and data
     with st.spinner("Loading model and data..."):
-        model, scaler, label_encoder, df = load_model_and_artifacts()
+        model, scaler, label_encoder, df, confusion_matrices = load_model_and_artifacts()
     
     if model is None:
         st.stop()
@@ -514,9 +553,10 @@ def main():
         filter_count = None if count_filter == "All" else count_filter
         
         # Compute similarity
-        with st.spinner("Computing similarity scores..."):
-            similarity_scores, uniqueness, pitch_details = compute_pitcher_similarity(
+        with st.spinner(f"Computing similarities for {selected_pitcher}..."):
+            similarity_scores, uniqueness, pitch_details, confusion_mass = compute_pitcher_similarity(
                 model, scaler, label_encoder, df, selected_pitcher,
+                confusion_matrices=confusion_matrices,
                 filter_pitch_type=filter_pitch_type,
                 filter_count=filter_count
             )
@@ -530,7 +570,7 @@ def main():
             
             for i, pitcher_a in enumerate(top_pitchers_list):
                 # Get similarity scores when analyzing pitcher A
-                sim_scores, _, _ = compute_pitcher_similarity(
+                sim_scores, _, _, _ = compute_pitcher_similarity(
                     _model, _scaler, _label_encoder, _df, pitcher_a
                 )
                 
