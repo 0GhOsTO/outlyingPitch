@@ -1,0 +1,14 @@
+{
+  "hidden1": 128,
+  "hidden2": 192,
+  "dropout_rate": 0.1142560917218199,
+  "lr": 0.0005182949302901112,
+  "weight_decay": 7.496277308305916e-06,
+  "batch_size": 64,
+  "best_val_f1": 0.8536399022961586,
+  "num_features": 32,
+  "num_classes": 110,
+  "epochs_trained": 71,
+  "optuna_study_name": "no-name-f6e4b540-5642-4642-8c40-817438a98847",
+  "optuna_trials": 20
+}
