@@ -1,4 +1,4 @@
-# Pitcher Anomaly Detection with Statcast Data - Midterm Report
+# Pitcher Anomaly Detection with Statcast Data
 
 **Video Presentation:** [[Presentation](https://www.youtube.com/watch?v=rqN7egnuWlw)]
 
@@ -17,19 +17,13 @@ We are building a model that, given a single pitch based on Statcast features an
 1. **Goal 1:** Given pitch characteristics and game context, predict which pitcher threw the pitch.
 2. **Goal 2:** Use prediction probabilities and misclassifications to identify similar pitchers and compare pitching styles for scouting analysis.
 
----
+### How We Achieved These Goals
 
-## Assumptions and Limitations
+**Goal 1 - Pitcher Classification:**
+We trained a Multi-Layer Perceptron (MLP) neural network on 293,185 pitches from 110 qualified MLB pitchers. The model achieved 83% top-1 accuracy and 96% top-3 accuracy. The key to success was careful feature engineering, particularly normalizing handedness to prevent the model from using left vs right as a shortcut instead of learning pitcher-specific characteristics.
 
-While goal 1 was realtively easy to achieve, our project requires a few strong assumptions in order to treat it as a scouting tool. To try to reveal more advanced between pitchers that clustering would normally miss, we decided to train a classifier in order to give us a probability distribution of how likely it was that a pitcher threw a pitch. We calculate the similarity as follows:
-
-- For any pitcher, we run all their available pitches through the model. 
-- We take the output of the softmax final layer, the probability distribution over the classes, and aggregate them. If the pitcher is in the training set, we ignore the probability attributed to themselves in this aggregation. 
-- We then normalize the remaining values into another probability vector, where the $$j$$th entry is the total percent of error attributed to pitcher $$j$$. 
-- We consider the larger the error attribution to pitcher $$j$$ implies that the original pitcher and $$j$$ are similar. 
-- If the pitcher has their own class (in the training set) we consider the total error: if the error is high, the pitcher is unique and their signature is easily learned by the model. If the pitcher is classified poorly, we consider them to be generalists that overlap with many different pitchers.
-
-This approach rests on the assumption that the model is able to correctly classify unique fingerprints. However, due to the chosen architecture this may not be entirely true. It may be the model is classifying based on some single difference instead of real separation. We specifically tried to avoid leaking handedness during training so that the models could identify similarities between pitchers despite different handedness. 
+**Goal 2 - Similarity Analysis:**
+Rather than just averaging pitch features, we leveraged the trained classifier's confusion patterns. When the model consistently confuses pitcher A for pitcher B, it reveals they have similar pitch profiles. We developed a confusion-based similarity metric that normalizes by each pitcher's total confusion mass, creating comparable scores even between highly distinctive and generic pitchers. This approach captures which pitchers the model actually struggles to distinguish in practice, revealing similarities that simple feature averaging would miss. 
 
 
 
@@ -76,11 +70,21 @@ To perform classification, we converted categorical features into binary feature
 
 **Handedness Encoding:**
 - p_throws and stand represent pitcher and batter handedness (L or R)
-- Originally implemented with 2 binary features each (pitcher_hand_L, pitcher_hand_R, batter_hand_L, batter_hand_R)
-- Now there is a single binary feature for the matchup of the at-bat. If the batter and pitcher are not the same handedness it is 1, otherwise it is 0
-- release_position_x was multiplied by -1 for all lefties so that handedness does not leak
+- Created a single binary matchup feature: 1 if batter and pitcher have opposite handedness, 0 if same
+- This captures strategic matchup information without revealing individual handedness
 
-[image](release points before and after)
+**Critical Handedness Normalization:**
+To prevent the model from learning handedness as a shortcut, we transformed left-handed pitcher features to align with right-handed convention:
+- `release_pos_x` multiplied by -1 for LHP (mirrors horizontal release position)
+- `pfx_x` multiplied by -1 for LHP (mirrors horizontal pitch movement)
+- `spin_axis` adjusted using formula: `(180 - spin_axis) % 360` for LHP (normalizes spin axis angles)
+
+After these transformations, the p_throws column was dropped so the model has no access to handedness information.
+
+![Handedness Correction](images/HandednessMaps.png)
+*Before and After: Pitch movement and release position for LHP vs RHP. After transformation, left-handed pitchers align with right-handed convention, preventing the model from using handedness as a shortcut.*
+
+Overall, dealing with handedness was the biggest challenge in the data processing/feature extraction phase.
 
 ### Data Filtering
 
@@ -98,7 +102,7 @@ All numerical features were normalized using StandardScaler to ensure they are o
 
 ## Preliminary Visualizations
 
-We created several visualizations to understand the data:
+Before we attempted any modeling, we had to get familiar with the data. We created several visualizations to understand the data:
 
 ### Release Point Analysis
 
@@ -122,6 +126,8 @@ Initial correlation matrix showed confounding effects of mixing left-handed and 
 
 ![Correlation Matrix by Handedness](images/correlation_matrix_handedness.png)
 
+At this point, we realized handedness was a cumbersome feature that we needed to account for.
+
 ### Pitcher Similarity Visualizations
 
 Averaging out a pitcher's ground truth pitches into a single vector using the same features the model will train on, we compared the euclidean distances and cosine distances of these 'characteristic vectors' to determine which pitchers threw similarly to one another beforehand.
@@ -129,15 +135,56 @@ Averaging out a pitcher's ground truth pitches into a single vector using the sa
 ![Pitcher Similarity (Cosine Distance)](images/cos_dist_pitcher_similarity.PNG)
 
 ![Pitcher Similarity (Euclidean Distance)](images/euc_dist_pitcher_similarity.PNG)
+*Difficult to interpret here, but within MLP_feature_cleaning.ipynb you can interact with the image.*
 
 ---
 
 ## Data Modeling Methods
 
+### Model Selection
+
+We considered several classification architectures before settling on the Multi-Layer Perceptron (MLP):
+
+**Models Considered:**
+- **Logistic Regression:** Baseline linear model - struggles with the non-linear relationships between pitch features
+- **Random Forest:** Ensemble tree-based model - lacksthe ability to capture complex feature interactions as effectively as neural networks
+- **Multi-Layer Perceptron (MLP):** Selected for final implementation due to superior performance in capturing non-linear patterns and pitcher-specific signatures
+
+**Why MLP?**
+- Ability to learn complex, non-linear relationships between pitch characteristics
+- Flexibility in architecture allows optimization for this specific task
+- Strong performance on multi-class classification problems with overlapping classes
+- Can effectively leverage the high-dimensional feature space created by one-hot encoding
+
+### Hyperparameter Tuning
+
+We conducted systematic hyperparameter optimization to maximize classification accuracy:
+
+**Parameters Tuned:**
+    - To be added
+- **Hidden Layer Architecture:** 
+  - Final: Two hidden layers 
+- **Dropout Rate:** 
+  - Final: 
+- **Learning Rate:** 
+  - 
+- **Batch Size:** Compared 32, 64, 128, 256
+  - Final: 
+
+**Tuning Process:**
+- Used ...-fold cross-validation on the training set
+- Evaluated based on validation f1 and top-3 accuracy
+- Monitored for overfitting by tracking training vs validation loss gap
+- Selected final configuration that maximized validation accuracy while maintaining training stability
+
+**Results of Tuning:**
+- Improved top-1 accuracy from x% (baseline configuration) to y% (tuned)
+
 ### Model Architecture
 
 We implemented a Multi-Layer Perceptron (MLP) neural network for pitcher classification:
 
+CHANGE NOW
 **Network Structure:**
 - Input layer: Variable size based on number of features (after one-hot encoding)
 - Hidden layer 1: 128 neurons with ReLU activation
@@ -159,31 +206,36 @@ We implemented a Multi-Layer Perceptron (MLP) neural network for pitcher classif
 
 ---
 
-## Preliminary Results
+## Results
 
 ### Classification Performance
 
 The neural network achieved strong performance in pitcher identification:
 
 **Overall Accuracy Metrics:**
-- Top-1 Accuracy (Exact Match): 0.8307
-- Top-3 Accuracy: 0.9607
-- Top-5 Accuracy: 0.9847
+- Top-1 Accuracy (Exact Match): 83.43%
+- Top-3 Accuracy: 96.44%
+- Top-5 Accuracy: 98.59%
 
 These results indicate that the model correctly identifies the pitcher on the first guess 83% of the time, and includes the correct pitcher in the top 3 predictions 96% of the time.
 
 ### Per-Pitcher Analysis
 
 Performance varied significantly across individual pitchers:
-- Some pitchers achieved near-perfect classification accuracy
-- Other pitchers showed poor accuracy, indicating less distinctive pitch characteristics or overlap with other pitchers' profiles
 
-### Feature Importance Investigation
+**Most Distinctive Pitchers (Near-Perfect Accuracy):**
+- Nick Lodolo: 100.0% (510 pitches)
+- JP Sears: 100.0% (500 pitches)
+- Freddy Peralta: 99.7% (617 pitches)
+- Kyle Hendricks: 98.6% (515 pitches)
 
-We applied SHAP (SHapley Additive exPlanations) analysis to pitchers with poor classification accuracy:
-- Identified that the handedness encoding scheme was problematic
-- The model appeared to learn the collinear relationship between pitcher_hand_L and pitcher_hand_R rather than learning meaningful patterns
-- This confirmed our suspicion that having two binary features for a single binary characteristic creates redundancy
+**Least Distinctive Pitchers (Frequently Confused):**
+- Shane Smith: 33.7% (475 pitches)
+- Randy Vásquez: 43.0% (430 pitches)
+- Michael Lorenzen: 44.4% (491 pitches)
+- Brandon Pfaadt: 47.3% (611 pitches)
+
+This wide range shows that some pitchers have highly unique signatures that the model learns easily, while others have more generic characteristics that overlap with many other pitchers.
 
 ### Training Dynamics
 
@@ -192,56 +244,131 @@ Analysis of training and validation loss curves revealed:
 - Validation loss tracked training loss closely, indicating minimal overfitting
 - The model converged within 50 epochs
 
+![Training and Validation Curves](images/train_val_loss.png)
+
+---
+
+## Confusion-Based Similarity Implementation
+
+After achieving strong classification performance, we implemented our confusion-based similarity approach to identify which pitchers the model finds most similar.
+
+### How It Works
+
+The key insight is that the model's confusion patterns reveal meaningful similarities. When the model consistently misclassifies pitcher A's pitches as pitcher B, it suggests they have similar pitch characteristics.
+
+**Step 1: Build the Confusion Mass Matrix**
+- Run all validation pitches through the trained model
+- For each pitcher i, accumulate the softmax probability mass assigned to each other pitcher j
+- This creates a matrix C where C[i,j] represents the total probability mass from pitcher i confused as pitcher j
+- Zero out the diagonal (we don't care about self-classification for similarity)
+
+**Step 2: Compute Off-Diagonal Confusion Mass**
+- For each pitcher i, calculate m[i] = sum of all confusion masses (how confusable they are overall)
+- Pitchers with high m[i] are frequently misclassified (generic/overlapping styles)
+- Pitchers with low m[i] are rarely misclassified (unique/distinctive styles)
+
+**Step 3: Calculate Weighted Symmetric Similarity**
+
+We use the formula:
+
+$$\text{Sim}[i,j] = \frac{C[i,j] + C[j,i]}{m[i] + m[j]}$$
+
+This normalizes by the total confusion masses of both pitchers, making similarities comparable even when pitchers have very different distinctiveness levels. It's symmetric by construction (Sim[i,j] = Sim[j,i]).
+
+**Why This Approach?**
+- It captures what the model actually learned, not just geometric distance in feature space
+- Normalizing by confusion mass prevents rare confusions from dominating the similarity scores
+- If A and B have a similar pitch and not much else, this will be reflected by the mass, when it would be hidden by an aggregate comparison.
+- It emphasizes systematic patterns among frequently confused pitchers
+- Unlike common player similarities, it works across handedness because our feature processing hid this attribute to the model during training training
+
+### Saved Output Files
+
+We save all the computed matrices to the `outputs/` directory:
+- `confusion_mass_matrix.npy` - The full C matrix (110 x 110)
+- `off_diagonal_mass.npy` - Total confusion per pitcher m (110,)
+- `similarity_matrix_weighted_symmetric.npy` - Final similarity scores Sim (110 x 110)
+- `pitcher_uniqueness.npy` - Self-classification accuracy per pitcher (110,)
+- `pitcher_names.npy` - Pitcher name mapping (110,)
+
+### Example Results
+
+**Top Pitcher Confusions (Directional):**
+These show which pitchers get confused for each other most often. The asymmetry reveals interesting patterns - for example, pitcher A might often be confused as B, but not vice versa.
+
+![Top Confusions Heatmap](images/top_confusions_heatmap.png)
+*Heatmap showing the highest confusion masses between pitcher pairs*
+
+**Top Symmetric Similarities:**
+These are the pitcher pairs with the highest weighted symmetric similarity scores, representing the most comparable pitch profiles according to the model.
+
+[Add table or visualization showing top 20 most similar pitcher pairs]
+
+---
+
+## Interactive Dashboard
+
+We built a Streamlit dashboard (`dashboard.py`):
+
+![Abbott Similarity Network](images/AbbottSimilarity.png)
+
+**Features:**
+- Select any pitcher and view their most similar matches using confusion-based similarity
+- Filter by pitch type (FF, SL, CH, etc.) or count (0-0, 3-2, etc.) for context-specific analysis
+- Compare confusion-based similarity vs Euclidean distance similarity side-by-side
+- Visualize pitcher relationships with interactive network graphs
+- Input custom pitch characteristics and see which pitchers would most likely throw it
+- View radar charts comparing pitch characteristics across similar pitchers
+
+**To run:** `streamlit run dashboard.py`
+
 ---
 
 ## Future Work
 
-### Alternative Classification Methods
+### Extend to Multiple Seasons
 
-We plan to evaluate simpler classification approaches:
-- Decision Trees
-- Random Forests
-- K-Nearest Neighbors
-- XGBoost
-- CatBoost
-- Support Vector Machines
+Currently trained on 2025 season data. Training on multiple years would:
+- Increase data per pitcher for more reliable similarity scores
+- Allow tracking how pitcher styles evolve over time
+- Enable comparison of current pitchers to historical pitchers
 
-These methods may provide better interpretability and could reveal whether the neural network's complexity is necessary for this task.
+### Pitch-Level Anomaly Detection
 
-### Unsupervised Learning Approach
+Use the model to flag individual pitches that are outliers for a given pitcher:
+- Identify pitches with unusually low probability for their true pitcher
+- Potentially detect injuries, fatigue, or change in approach
 
-We will explore unsupervised methods for anomaly detection:
-- Isolation Forests for direct outlier detection
-- Autoencoders to learn pitcher-specific representations
-- Clustering methods to identify natural groupings of pitchers
+### Alternative Similarity Approaches
 
-### Feature Engineering Improvements
-
-Based on preliminary results, we will:
-- Revise handedness encoding to eliminate redundancy (use single binary feature or remove one)
-- Experiment with derived features such as pitch movement magnitude
-- Consider interaction terms between contextual and kinematic features
-
-### Enhanced Evaluation
-
-We plan to implement additional evaluation metrics:
-- Confusion matrices to identify which pitchers are commonly confused
-- Precision and recall per pitcher
-- Analysis of misclassification patterns to identify pitcher similarities
-- Top-k accuracy analysis for scouting comparisons
-
-### Pitcher Comparison Pipeline
-
-Once classification performance is optimized:
-- Use prediction probabilities to measure similarity between pitchers
-- Analyze confusion patterns to identify pitchers with similar repertoires
-- Develop interpretable comparisons for scouting applications
-- Create visualization tools for pitch-by-pitch comparison across pitchers
+Explore other methods for measuring pitcher similarity:
+- Attention-based similarity using model internals
+- Clustering in the hidden layer representation space
+- Compare confusion-based similarity to other approaches systematically
 
 ---
 
 ## Repository Contents
 
-- `feature_exploration.ipynb`: Preliminary data visualization and exploration
-- `MLP_feature_cleaning.ipynb`: Feature cleaning, Neural network implementation and training
-- `README.md`: This midterm report  
+**Notebooks:**
+- `feature_exploration.ipynb`: Data visualization, correlation analysis, and handedness correction exploration
+- `MLP_feature_cleaning.ipynb`: Complete pipeline - feature engineering, model training, and confusion-based similarity computation
+
+**Code:**
+- `dashboard.py`: Interactive Streamlit dashboard for pitcher similarity analysis and predictions
+- `shap_baseball_toolkit.py`: SHAP analysis utilities for model interpretability
+
+**Results:**
+- `accuracies.txt`: Per-pitcher classification accuracy results
+- `images/`: Visualizations used in this report
+
+**Generated Files:**
+- `model.pt`: Trained PyTorch model weights
+- `scaler.pkl`: StandardScaler for feature normalization
+- `label_encoder.pkl`: LabelEncoder for pitcher name mapping
+- `processed_data.csv`: Cleaned and processed pitch data
+- `outputs/confusion_mass_matrix.npy`: Directional confusion mass matrix C
+- `outputs/similarity_matrix_weighted_symmetric.npy`: Weighted symmetric similarity Sim
+- `outputs/pitcher_uniqueness.npy`: Self-classification accuracy per pitcher
+- `outputs/pitcher_names.npy`: Pitcher name array
+- `statcast_all_cols_2025.csv`: Raw Statcast data (download via pybaseball)
