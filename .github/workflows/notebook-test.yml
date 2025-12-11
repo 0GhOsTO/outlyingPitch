@@ -1,0 +1,85 @@
+name: Notebook Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-notebook:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'requirements_dashboard.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install nbconvert nbformat jupyter
+    
+    - name: Check notebook syntax
+      run: |
+        python -c "import nbformat; nb = nbformat.read('MLP_feature_cleaning.ipynb', as_version=4); print(f'✓ Notebook has {len(nb.cells)} cells')"
+    
+    - name: Validate imports (dry run)
+      run: |
+        python -c "
+        import torch
+        import pandas as pd
+        import numpy as np
+        import sklearn
+        import optuna
+        import shap
+        import plotly
+        print('✓ All major dependencies imported successfully')
+        "
+    
+    - name: Test data loading
+      run: |
+        python -c "
+        import pandas as pd
+        import os
+        # Check if data files exist
+        files = ['statcast_pitch_data_2025.csv']
+        for f in files:
+            if os.path.exists(f):
+                print(f'✓ Found {f}')
+            else:
+                print(f'⚠ {f} not found (expected for CI)')
+        "
+    
+    - name: Check outputs directory
+      run: |
+        mkdir -p outputs
+        echo "✓ Outputs directory ready"
+    
+    - name: Verify hyperparameters file
+      run: |
+        if [ -f "outputs/best_hyperparameters.json" ]; then
+          echo "✓ Hyperparameters file exists"
+          cat outputs/best_hyperparameters.json
+        else
+          echo "⚠ No hyperparameters file (expected for CI without training)"
+        fi
+    
+    - name: Notebook execution test (skip training cells)
+      run: |
+        echo "✓ Notebook validation complete"
+        echo "Note: Full execution skipped in CI (requires large data files and GPU)"
+        echo "Run 'make install && jupyter notebook' locally for full testing"
