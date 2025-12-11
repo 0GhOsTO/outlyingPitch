@@ -20,7 +20,7 @@ We are building a model that, given a single pitch based on Statcast features an
 ### How We Achieved These Goals
 
 **Goal 1 - Pitcher Classification:**
-We trained a Multi-Layer Perceptron (MLP) neural network on 293,185 pitches from 110 qualified MLB pitchers. The model achieved 83% top-1 accuracy and 96% top-3 accuracy. The key to success was careful feature engineering, particularly normalizing handedness to prevent the model from using left vs right as a shortcut instead of learning pitcher-specific characteristics.
+We trained a Multi-Layer Perceptron (MLP) neural network on 293,185 pitches from 110 qualified MLB pitchers. The model achieved 85% top-1 accuracy and 97% top-3 accuracy. The key to success was careful feature engineering, particularly normalizing handedness to prevent the model from using left vs right as a shortcut instead of learning pitcher-specific characteristics.
 
 **Goal 2 - Similarity Analysis:**
 Rather than just averaging pitch features, we leveraged the trained classifier's confusion patterns. When the model consistently confuses pitcher A for pitcher B, it reveals they have similar pitch profiles. We developed a confusion-based similarity metric that normalizes by each pitcher's total confusion mass, creating comparable scores even between highly distinctive and generic pitchers. This approach captures which pitchers the model actually struggles to distinguish in practice, revealing similarities that simple feature averaging would miss. 
