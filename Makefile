@@ -18,13 +18,13 @@ VENV := venv
 HYPERPARAMS_FILE := outputs/best_hyperparameters.json
 
 # Extract hyperparameters using jq (install with: brew install jq)
-# Fallback values if file doesn't exist
-HIDDEN1 := $(shell [ -f $(HYPERPARAMS_FILE) ] && jq -r '.hidden1' $(HYPERPARAMS_FILE) || echo "128")
+# Fallback values if file doesn't exist (using latest optimized values)
+HIDDEN1 := $(shell [ -f $(HYPERPARAMS_FILE) ] && jq -r '.hidden1' $(HYPERPARAMS_FILE) || echo "250")
 HIDDEN2 := $(shell [ -f $(HYPERPARAMS_FILE) ] && jq -r '.hidden2' $(HYPERPARAMS_FILE) || echo "192")
-DROPOUT_RATE := $(shell [ -f $(HYPERPARAMS_FILE) ] && jq -r '.dropout_rate' $(HYPERPARAMS_FILE) || echo "0.114")
-LEARNING_RATE := $(shell [ -f $(HYPERPARAMS_FILE) ] && jq -r '.lr' $(HYPERPARAMS_FILE) || echo "0.000518")
+DROPOUT_RATE := $(shell [ -f $(HYPERPARAMS_FILE) ] && jq -r '.dropout_rate' $(HYPERPARAMS_FILE) || echo "0.273")
+LEARNING_RATE := $(shell [ -f $(HYPERPARAMS_FILE) ] && jq -r '.lr' $(HYPERPARAMS_FILE) || echo "0.00099")
 BATCH_SIZE := $(shell [ -f $(HYPERPARAMS_FILE) ] && jq -r '.batch_size' $(HYPERPARAMS_FILE) || echo "64")
-WEIGHT_DECAY := $(shell [ -f $(HYPERPARAMS_FILE) ] && jq -r '.weight_decay' $(HYPERPARAMS_FILE) || echo "0.0000075")
+WEIGHT_DECAY := $(shell [ -f $(HYPERPARAMS_FILE) ] && jq -r '.weight_decay' $(HYPERPARAMS_FILE) || echo "0.0000102")
 
 .PHONY: all install install-mlp install-dashboard run-mlp run-dashboard clean venv
 
