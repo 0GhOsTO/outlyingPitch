@@ -1,6 +1,6 @@
 # Pitcher Anomaly Detection with Statcast Data
 
-**Video Presentation:** [[Presentation](https://www.youtube.com/watch?v=rqN7egnuWlw)]
+**Video Presentation:** [[Presentation](https://youtu.be/qRGzYdCre7g)]
 
 ---
 
