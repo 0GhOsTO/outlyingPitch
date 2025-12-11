@@ -363,7 +363,8 @@ These show which pitchers get confused for each other most often. The asymmetry 
 **Top Symmetric Similarities:**
 These are the pitcher pairs with the highest weighted symmetric similarity scores, representing the most comparable pitch profiles according to the model.
 
-[Add table or visualization showing top 20 most similar pitcher pairs]
+![Top 20 Similar Pitcher Pairs](images/top20_similar_pairs.png)
+*Top 20 most similar pitcher pairs based on confusion-based symmetric similarity. The most similar pair is Andrew Heaney and Chris Sale (0.66)*
 
 ---
 
