@@ -327,8 +327,8 @@ We save all the computed matrices to the `outputs/` directory:
 **Top Pitcher Confusions (Directional):**
 These show which pitchers get confused for each other most often. The asymmetry reveals interesting patterns - for example, pitcher A might often be confused as B, but not vice versa.
 
-![Top Confusions Heatmap](images/top_confusions_heatmap.png)
-*Heatmap showing the highest confusion masses between pitcher pairs*
+![Top 20 Pitcher Confusions](images/top20_confusions.png)
+*Top 20 directional pitcher confusions showing which pitchers the model most frequently misidentifies. The highest confusion is Nick Lodolo → Chris Sale (0.93), indicating that when the model sees a Lodolo pitch, it assigns 93% of its confusion probability mass to Chris Sale.*
 
 **Top Symmetric Similarities:**
 These are the pitcher pairs with the highest weighted symmetric similarity scores, representing the most comparable pitch profiles according to the model.
