@@ -237,6 +237,36 @@ Performance varied significantly across individual pitchers:
 
 This wide range shows that some pitchers have highly unique signatures that the model learns easily, while others have more generic characteristics that overlap with many other pitchers.
 
+---
+
+### Feature Importance Analysis (SHAP)
+
+We were able to use the SHAP toolkit to generate feature importance values from our model.
+**This allowed us to learn:**
+- Features with positive impact that the model relied on the most
+- Features with negative impact that confused the model
+- Net effect per feature
+- Balance of net-positive versus net-negative features
+
+![Overall SHAP Analysis](images/directional_shap_analysis.png)
+![Most Important Features](images/feature_importance_shap.png)
+
+**Noteworthy Positive Features (our model learned the most from):**
+- Release Position X and Z
+- Spin Axis
+- Release Speed
+
+**Noteworthy Negative Features (our model confused pitchers on these):**
+- Pitch Type for Changeup and Four-seam Fastball
+- PFX X
+- Release Speed
+- Pitch Counts (there are a lot of binary features for each pitch count)
+ 
+Release speed is both part of positive and negative as it depends on which pitcher specifically it's negatively or positively associated with.
+We had a higher proportion of negative than positive features (mostly due to the pitch count features); we could definitely drop these features as they're likely just noise the model doesn't need to focus on.
+
+---
+
 ### Training Dynamics
 
 Analysis of training and validation loss curves revealed:
