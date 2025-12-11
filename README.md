@@ -174,21 +174,22 @@ We conducted systematic hyperparameter optimization using Optuna, a state-of-the
 
 **Parameters Tuned:**
 - **Hidden Layer 1 Size:** Tested [64, 128, 192, 250] neurons
-  - Final: 128 neurons
-- **Hidden Layer 2 Size:** Tested [32, 64, 128, 192] neurons
+  - Final: 250 neurons
+- **Hidden Layer 2 Size:** Tested [32, 64, 128, 192, 250] neurons (constrained to ≤ hidden1)
   - Final: 192 neurons
 - **Dropout Rate:** Range [0.1, 0.5]
-  - Final: 0.114
+  - Final: 0.273
 - **Learning Rate:** Log-scale range [0.0001, 0.01]
-  - Final: 0.000518
+  - Final: 0.00099
 - **Weight Decay:** Log-scale range [0.000001, 0.001]
-  - Final: 0.0000075
+  - Final: 0.0000102
 - **Batch Size:** Tested [32, 64, 128]
   - Final: 64
 
 **Tuning Process:**
 - Used Optuna's Tree-structured Parzen Estimator (TPE) sampler for intelligent search
 - Optimized for validation F1 score (macro-averaged)
+- Applied architectural constraint: hidden2 ≤ hidden1 to prevent overfitting
 - Applied early stopping (patience=3 epochs) during trial training
 - Trained each trial for up to 20 epochs
 - Monitored for overfitting by tracking training vs validation loss gap
@@ -205,19 +206,19 @@ We implemented a Multi-Layer Perceptron (MLP) neural network for pitcher classif
 
 **Network Structure (Optimized):**
 - Input layer: 32 features (after one-hot encoding and feature engineering)
-- Hidden layer 1: 128 neurons with ReLU activation
-- Dropout: 0.114 rate after first hidden layer
+- Hidden layer 1: 250 neurons with ReLU activation
+- Dropout: 0.273 rate after first hidden layer
 - Hidden layer 2: 192 neurons with ReLU activation  
-- Dropout: 0.114 rate after second hidden layer
+- Dropout: 0.273 rate after second hidden layer
 - Output layer: 110 neurons (one per pitcher) with softmax activation
 
 **Training Configuration:**
 - Loss function: Cross-entropy loss
-- Optimizer: Adam with learning rate of 0.000518 and weight decay of 0.0000075
+- Optimizer: Adam with learning rate of 0.00099 and weight decay of 0.0000102
 - Batch size: 64
 - Training epochs: Up to 100 with early stopping (patience=10)
 - Data split: 80% training, 20% validation (stratified by pitcher)
-- Final model: Trained for 11 epochs before early stopping
+- Final model: Trained for 85 epochs before early stopping
 
 **Implementation Details:**
 - Used PyTorch framework for neural network implementation
@@ -236,9 +237,9 @@ We implemented a Multi-Layer Perceptron (MLP) neural network for pitcher classif
 The neural network achieved strong performance in pitcher identification:
 
 **Overall Accuracy Metrics:**
-- Top-1 Accuracy (Exact Match): 85.73%
-- Top-3 Accuracy: 97.40%
-- Top-5 Accuracy: 99.12%
+- Top-1 Accuracy (Exact Match): 85.70%
+- Top-3 Accuracy: 97.36%
+- Top-5 Accuracy: 99.09%
 
 These results indicate that the model correctly identifies the pitcher on the first guess 86% of the time, and includes the correct pitcher in the top 3 predictions 97% of the time.
 
@@ -247,25 +248,25 @@ These results indicate that the model correctly identifies the pitcher on the fi
 Performance varied significantly across individual pitchers, revealing which pitchers have truly distinctive signatures:
 
 **Per-Pitcher Accuracy Statistics:**
-- Mean: 85.33%
-- Median: 86.98%
-- Standard Deviation: 11.35%
+- Mean: 85.34%
+- Median: 87.46%
+- Standard Deviation: 10.91%
 
 **Most Distinctive Pitchers (Near-Perfect Accuracy):**
 - Nick Lodolo: 100.0% (510/510 pitches)
 - JP Sears: 100.0% (500/500 pitches)
 - Kyle Hendricks: 99.8% (514/515 pitches)
-- Freddy Peralta: 99.7% (615/617 pitches)
-- Justin Verlander: 98.9% (531/537 pitches)
+- Justin Verlander: 99.6% (535/537 pitches)
+- Freddy Peralta: 99.4% (613/617 pitches)
 
 **Least Distinctive Pitchers (Frequently Confused):**
-- Shane Smith: 43.2% (205/475 pitches)
-- Randy Vásquez: 43.7% (188/430 pitches)
-- Michael Lorenzen: 52.5% (258/491 pitches)
-- Luis Severino: 54.2% (296/546 pitches)
-- Brandon Pfaadt: 60.9% (372/611 pitches)
+- Randy Vásquez: 52.3% (225/430 pitches)
+- Davis Martin: 55.0% (260/473 pitches)
+- Shane Smith: 56.2% (267/475 pitches)
+- Antonio Senzatela: 58.9% (289/491 pitches)
+- Luis Severino: 59.9% (327/546 pitches)
 
-This wide range (43%-100%) shows that some pitchers have highly unique signatures that the model learns easily, while others have more generic characteristics that overlap with many other pitchers. The model's confusion patterns reveal real similarities in pitching styles that would be difficult to detect through simple statistical averaging.
+This wide range (52%-100%) shows that some pitchers have highly unique signatures that the model learns easily, while others have more generic characteristics that overlap with many other pitchers. The model's confusion patterns reveal real similarities in pitching styles that would be difficult to detect through simple statistical averaging.
 
 ---
 
